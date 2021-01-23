@@ -4,8 +4,13 @@
   "description": "",
   "version": "1.0",
   "author": {
-    "name": "fy0"
+    "name": "fy0",
+    "email": "fy0748@gmail.com",
+    "url": "https://github.com/fy0"
   },
   "icon": "",
-  "main": "main.js"
+  "main": "main.js",
+  "scripts": {
+    "dev": "tsc -w"
+  }
 }

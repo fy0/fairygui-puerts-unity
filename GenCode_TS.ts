@@ -1,13 +1,15 @@
 import { FairyEditor } from 'csharp';
 import CodeWriter from './CodeWriter';
 
-function genCode(handler: FairyEditor.PublishHandler) {
+function genCode(handler: FairyEditor.PublishHandler, isPuerts = true) {
     let settings = (<FairyEditor.GlobalPublishSettings>handler.project.GetSettings("Publish")).codeGeneration;
     let codePkgName = handler.ToFilename(handler.pkg.name); //convert chinese to pinyin, remove special chars etc.
     let exportCodePath = handler.exportCodePath + '/' + codePkgName;
     let namespaceName = codePkgName;
     let ns = "fgui";
     let isThree = handler.project.type == FairyEditor.ProjectType.ThreeJS;
+
+    if (isPuerts) ns = "FairyGUI";
 
     if (settings.packageName)
         namespaceName = settings.packageName + '.' + namespaceName;
@@ -35,6 +37,10 @@ function genCode(handler: FairyEditor.PublishHandler) {
             writer.writeln();
         }
 
+        if (isPuerts) {
+            writer.writeln('import { FairyGUI } from "csharp";');
+        }
+
         if (isThree) {
             writer.writeln('import * as fgui from "fairygui-three";');
             if (refCount == 0)
@@ -55,31 +61,61 @@ function genCode(handler: FairyEditor.PublishHandler) {
 
         writer.writeln('public static createInstance():%s', classInfo.className);
         writer.startBlock();
-        writer.writeln('return <%s>(%s.UIPackage.createObject("%s", "%s"));', classInfo.className, ns, handler.pkg.name, classInfo.resName);
+
+        if (isPuerts) {
+            writer.writeln('return <%s>(%s.UIPackage.CreateObject("%s", "%s"));', classInfo.className, ns, handler.pkg.name, classInfo.resName);
+        } else {
+            writer.writeln('return <%s>(%s.UIPackage.createObject("%s", "%s"));', classInfo.className, ns, handler.pkg.name, classInfo.resName);
+        }
         writer.endBlock();
         writer.writeln();
 
         writer.writeln('protected onConstruct():void');
         writer.startBlock();
-        for (let j: number = 0; j < memberCnt; j++) {
-            let memberInfo = members.get_Item(j);
-            if (memberInfo.group == 0) {
-                if (getMemberByName)
-                    writer.writeln('this.%s = <%s>(this.getChild("%s"));', memberInfo.varName, memberInfo.type, memberInfo.name);
-                else
-                    writer.writeln('this.%s = <%s>(this.getChildAt(%s));', memberInfo.varName, memberInfo.type, memberInfo.index);
+
+        if (isPuerts) {
+            for (let j: number = 0; j < memberCnt; j++) {
+                let memberInfo = members.get_Item(j);
+                if (memberInfo.group == 0) {
+                    if (getMemberByName)
+                        writer.writeln('this.%s = <%s>(this.GetChild("%s"));', memberInfo.varName, memberInfo.type, memberInfo.name);
+                    else
+                        writer.writeln('this.%s = <%s>(this.GetChildAt(%s));', memberInfo.varName, memberInfo.type, memberInfo.index);
+                }
+                else if (memberInfo.group == 1) {
+                    if (getMemberByName)
+                        writer.writeln('this.%s = this.GetController("%s");', memberInfo.varName, memberInfo.name);
+                    else
+                        writer.writeln('this.%s = this.GetControllerAt(%s);', memberInfo.varName, memberInfo.index);
+                }
+                else {
+                    if (getMemberByName)
+                        writer.writeln('this.%s = this.GetTransition("%s");', memberInfo.varName, memberInfo.name);
+                    else
+                        writer.writeln('this.%s = this.GetTransitionAt(%s);', memberInfo.varName, memberInfo.index);
+                }
             }
-            else if (memberInfo.group == 1) {
-                if (getMemberByName)
-                    writer.writeln('this.%s = this.getController("%s");', memberInfo.varName, memberInfo.name);
-                else
-                    writer.writeln('this.%s = this.getControllerAt(%s);', memberInfo.varName, memberInfo.index);
-            }
-            else {
-                if (getMemberByName)
-                    writer.writeln('this.%s = this.getTransition("%s");', memberInfo.varName, memberInfo.name);
-                else
-                    writer.writeln('this.%s = this.getTransitionAt(%s);', memberInfo.varName, memberInfo.index);
+        } else {
+            for (let j: number = 0; j < memberCnt; j++) {
+                let memberInfo = members.get_Item(j);
+                if (memberInfo.group == 0) {
+                    if (getMemberByName)
+                        writer.writeln('this.%s = <%s>(this.getChild("%s"));', memberInfo.varName, memberInfo.type, memberInfo.name);
+                    else
+                        writer.writeln('this.%s = <%s>(this.getChildAt(%s));', memberInfo.varName, memberInfo.type, memberInfo.index);
+                }
+                else if (memberInfo.group == 1) {
+                    if (getMemberByName)
+                        writer.writeln('this.%s = this.getController("%s");', memberInfo.varName, memberInfo.name);
+                    else
+                        writer.writeln('this.%s = this.getControllerAt(%s);', memberInfo.varName, memberInfo.index);
+                }
+                else {
+                    if (getMemberByName)
+                        writer.writeln('this.%s = this.getTransition("%s");', memberInfo.varName, memberInfo.name);
+                    else
+                        writer.writeln('this.%s = this.getTransitionAt(%s);', memberInfo.varName, memberInfo.index);
+                }
             }
         }
         writer.endBlock();
@@ -103,6 +139,11 @@ function genCode(handler: FairyEditor.PublishHandler) {
         writer.writeln();
     }
 
+    if (isPuerts) {
+        writer.writeln('import { FairyGUI } from "csharp";');
+        writer.writeln('import { $typeof } from "puerts";');
+    }
+
     writer.writeln();
     writer.writeln('export default class %s', binderName);
     writer.startBlock();
@@ -111,7 +152,11 @@ function genCode(handler: FairyEditor.PublishHandler) {
     writer.startBlock();
     for (let i: number = 0; i < classCnt; i++) {
         let classInfo = classes.get_Item(i);
-        writer.writeln('%s.UIObjectFactory.setExtension(%s.URL, %s);', ns, classInfo.className, classInfo.className);
+        if (isPuerts) {
+            writer.writeln('%s.UIObjectFactory.SetPackageItemExtension(%s.URL, $typeof(%s));', ns, classInfo.className, classInfo.className);
+        } else {
+            writer.writeln('%s.UIObjectFactory.setExtension(%s.URL, %s);', ns, classInfo.className, classInfo.className);
+        }
     }
     writer.endBlock(); //bindall
 
