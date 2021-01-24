@@ -28,6 +28,11 @@ function genCode(handler: FairyEditor.PublishHandler, isPuerts = true) {
         let references = classInfo.references;
         writer.reset();
 
+        if (isPuerts) {
+            writer.writeln('/* eslint-disable */');
+            writer.writeln();
+        }
+
         let refCount = references.Count;
         if (refCount > 0) {
             for (let j: number = 0; j < refCount; j++) {
@@ -39,6 +44,7 @@ function genCode(handler: FairyEditor.PublishHandler, isPuerts = true) {
 
         if (isPuerts) {
             writer.writeln('import { FairyGUI } from "csharp";');
+            writer.writeln();
         }
 
         if (isThree) {
@@ -59,11 +65,31 @@ function genCode(handler: FairyEditor.PublishHandler, isPuerts = true) {
         writer.writeln('public static URL:string = "ui://%s%s";', handler.pkg.id, classInfo.resId);
         writer.writeln();
 
+        if (isPuerts) {
+            writer.writeln('protected static isBinded = false;');
+            writer.writeln();
+
+            writer.writeln('static bind ()');
+            writer.startBlock();
+
+            writer.writeln('if (!this.isBinded)');
+            writer.startBlock();
+            writer.writeln('FairyGUI.UIObjectFactory.SetPackageItemExtension(this.URL, () => new this());');
+            writer.writeln('this.isBinded = true;');
+            writer.endBlock();
+
+            writer.endBlock();
+            writer.writeln();
+        }
+
         writer.writeln('public static createInstance():%s', classInfo.className);
         writer.startBlock();
 
         if (isPuerts) {
-            writer.writeln('return <%s>(%s.UIPackage.CreateObject("%s", "%s"));', classInfo.className, ns, handler.pkg.name, classInfo.resName);
+            writer.writeln(`this.bind();`);
+            writer.writeln(`const obj = <${classInfo.className}>(${ns}.UIPackage.CreateObject("${handler.pkg.name}", "${classInfo.resName}"));`);
+            writer.writeln(`obj.onConstruct();`);
+            writer.writeln(`return obj;`);
         } else {
             writer.writeln('return <%s>(%s.UIPackage.createObject("%s", "%s"));', classInfo.className, ns, handler.pkg.name, classInfo.resName);
         }
@@ -77,10 +103,15 @@ function genCode(handler: FairyEditor.PublishHandler, isPuerts = true) {
             for (let j: number = 0; j < memberCnt; j++) {
                 let memberInfo = members.get_Item(j);
                 if (memberInfo.group == 0) {
-                    if (getMemberByName)
+                    if (getMemberByName) {
                         writer.writeln('this.%s = <%s>(this.GetChild("%s"));', memberInfo.varName, memberInfo.type, memberInfo.name);
-                    else
+                    } else {
                         writer.writeln('this.%s = <%s>(this.GetChildAt(%s));', memberInfo.varName, memberInfo.type, memberInfo.index);
+                    }
+
+                    if (!memberInfo.type.startsWith('FairyGUI.')) {
+                        writer.writeln(`(this.${memberInfo.varName} as any).onConstruct()`);
+                    }
                 }
                 else if (memberInfo.group == 1) {
                     if (getMemberByName)
@@ -127,42 +158,45 @@ function genCode(handler: FairyEditor.PublishHandler, isPuerts = true) {
 
     writer.reset();
 
-    let binderName = codePkgName + 'Binder';
+    if (!isPuerts) {
+        // 脚本中基本会继承所有的类，所以集中绑定没太大必要
+        let binderName = codePkgName + 'Binder';
 
-    for (let i: number = 0; i < classCnt; i++) {
-        let classInfo = classes.get_Item(i);
-        writer.writeln('import %s from "./%s";', classInfo.className, classInfo.className);
-    }
-
-    if (isThree) {
-        writer.writeln('import * as fgui from "fairygui-three";');
-        writer.writeln();
-    }
-
-    if (isPuerts) {
-        writer.writeln('import { FairyGUI } from "csharp";');
-        writer.writeln('import { $typeof } from "puerts";');
-    }
-
-    writer.writeln();
-    writer.writeln('export default class %s', binderName);
-    writer.startBlock();
-
-    writer.writeln('public static bindAll():void');
-    writer.startBlock();
-    for (let i: number = 0; i < classCnt; i++) {
-        let classInfo = classes.get_Item(i);
-        if (isPuerts) {
-            writer.writeln('%s.UIObjectFactory.SetPackageItemExtension(%s.URL, $typeof(%s));', ns, classInfo.className, classInfo.className);
-        } else {
-            writer.writeln('%s.UIObjectFactory.setExtension(%s.URL, %s);', ns, classInfo.className, classInfo.className);
+        for (let i: number = 0; i < classCnt; i++) {
+            let classInfo = classes.get_Item(i);
+            writer.writeln('import %s from "./%s";', classInfo.className, classInfo.className);
         }
+
+        if (isThree) {
+            writer.writeln('import * as fgui from "fairygui-three";');
+            writer.writeln();
+        }
+
+        if (isPuerts) {
+            writer.writeln('import { FairyGUI } from "csharp";');
+            writer.writeln('import { $typeof } from "puerts";');
+        }
+
+        writer.writeln();
+        writer.writeln('export default class %s', binderName);
+        writer.startBlock();
+
+        writer.writeln('public static bindAll():void');
+        writer.startBlock();
+        for (let i: number = 0; i < classCnt; i++) {
+            let classInfo = classes.get_Item(i);
+            if (isPuerts) {
+                writer.writeln('%s.UIObjectFactory.SetPackageItemExtension(%s.URL, $typeof(%s));', ns, classInfo.className, classInfo.className);
+            } else {
+                writer.writeln('%s.UIObjectFactory.setExtension(%s.URL, %s);', ns, classInfo.className, classInfo.className);
+            }
+        }
+        writer.endBlock(); //bindall
+
+        writer.endBlock(); //class
+
+        writer.save(exportCodePath + '/' + binderName + '.ts');
     }
-    writer.endBlock(); //bindall
-
-    writer.endBlock(); //class
-
-    writer.save(exportCodePath + '/' + binderName + '.ts');
 }
 
 export { genCode };
