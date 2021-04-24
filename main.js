@@ -1,7 +1,7 @@
 "use strict";
 //FYI: https://github.com/Tencent/puerts/blob/master/doc/unity/manual.md
-Object.defineProperty(exports, "__esModule", { value: true });
-const GenCode_TS_1 = require("./GenCode_TS");
+exports.__esModule = true;
+var GenCode_TS_1 = require("./GenCode_TS");
 function onPublish(handler) {
     if (!handler.genCode)
         return;

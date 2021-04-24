@@ -65,30 +65,11 @@ function genCode(handler: FairyEditor.PublishHandler, isPuerts = true) {
         writer.writeln('public static URL:string = "ui://%s%s";', handler.pkg.id, classInfo.resId);
         writer.writeln();
 
-        if (isPuerts) {
-            writer.writeln('protected static isBinded = false;');
-            writer.writeln();
-
-            writer.writeln('static bind ()');
-            writer.startBlock();
-
-            writer.writeln('if (!this.isBinded)');
-            writer.startBlock();
-            writer.writeln('FairyGUI.UIObjectFactory.SetPackageItemExtension(this.URL, () => new this());');
-            writer.writeln('this.isBinded = true;');
-            writer.endBlock();
-
-            writer.endBlock();
-            writer.writeln();
-        }
-
         writer.writeln('public static createInstance():%s', classInfo.className);
         writer.startBlock();
 
         if (isPuerts) {
-            writer.writeln(`this.bind();`);
             writer.writeln(`const obj = <${classInfo.className}>(${ns}.UIPackage.CreateObject("${handler.pkg.name}", "${classInfo.resName}"));`);
-            writer.writeln(`obj.onConstruct();`);
             writer.writeln(`return obj;`);
         } else {
             writer.writeln('return <%s>(%s.UIPackage.createObject("%s", "%s"));', classInfo.className, ns, handler.pkg.name, classInfo.resName);
@@ -109,9 +90,9 @@ function genCode(handler: FairyEditor.PublishHandler, isPuerts = true) {
                         writer.writeln('this.%s = <%s>(this.GetChildAt(%s));', memberInfo.varName, memberInfo.type, memberInfo.index);
                     }
 
-                    if (!memberInfo.type.startsWith('FairyGUI.')) {
-                        writer.writeln(`(this.${memberInfo.varName} as any).onConstruct()`);
-                    }
+                    //if (!memberInfo.type.startsWith('FairyGUI.')) {
+                    //    writer.writeln(`(this.${memberInfo.varName} as any).onConstruct();`);
+                    //}
                 }
                 else if (memberInfo.group == 1) {
                     if (getMemberByName)
@@ -158,8 +139,7 @@ function genCode(handler: FairyEditor.PublishHandler, isPuerts = true) {
 
     writer.reset();
 
-    if (!isPuerts) {
-        // 脚本中基本会继承所有的类，所以集中绑定没太大必要
+    if (isPuerts) {
         let binderName = codePkgName + 'Binder';
 
         for (let i: number = 0; i < classCnt; i++) {
@@ -173,8 +153,9 @@ function genCode(handler: FairyEditor.PublishHandler, isPuerts = true) {
         }
 
         if (isPuerts) {
-            writer.writeln('import { FairyGUI } from "csharp";');
-            writer.writeln('import { $typeof } from "puerts";');
+            // writer.writeln('import { FairyGUI } from "csharp";');
+            writer.writeln('import { bind } from "./fairygui";');
+            // writer.writeln('import { $typeof } from "puerts";');
         }
 
         writer.writeln();
@@ -186,7 +167,7 @@ function genCode(handler: FairyEditor.PublishHandler, isPuerts = true) {
         for (let i: number = 0; i < classCnt; i++) {
             let classInfo = classes.get_Item(i);
             if (isPuerts) {
-                writer.writeln('%s.UIObjectFactory.SetPackageItemExtension(%s.URL, $typeof(%s));', ns, classInfo.className, classInfo.className);
+                writer.writeln('bind(%s.URL, %s);', classInfo.className, classInfo.className);
             } else {
                 writer.writeln('%s.UIObjectFactory.setExtension(%s.URL, %s);', ns, classInfo.className, classInfo.className);
             }
@@ -196,6 +177,29 @@ function genCode(handler: FairyEditor.PublishHandler, isPuerts = true) {
         writer.endBlock(); //class
 
         writer.save(exportCodePath + '/' + binderName + '.ts');
+        writer.reset();
+
+
+        writer.writeln('import { FairyGUI } from "csharp";');
+        writer.writeln(`
+export function bind<T extends FairyGUI.GComponent>(url: string, cls: new()=> T) {
+  FairyGUI.UIObjectFactory.SetPackageItemExtension(url, () => {
+    const obj = new cls();
+    obj.scriptInstance = FairyGUI.Utils.VirualClassObject.Instance(owner => {
+      const bind_method = (name: string) => {
+        if (name in obj && typeof obj[name] === 'function') {
+          owner.AddMethod(name, () => obj[name]());
+        }
+      };
+      for (const vmethod of ["onConstruct", "onInit", "onShown", "onHide", "doShowAnimation", "doHideAnimation"]) {
+        bind_method(vmethod);
+      }
+    });
+    return obj;
+  });
+}
+`)
+        writer.save(exportCodePath + '/fairygui.ts')
     }
 }
 
